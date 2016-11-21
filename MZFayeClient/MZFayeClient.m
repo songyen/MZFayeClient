@@ -70,6 +70,7 @@ NSInteger const MZFayeClientDefaultMaximumAttempts = 5;
 @property (nonatomic, readwrite, strong) NSMutableDictionary *channelReceivedMessageHandlers;
 @property (nonatomic, readwrite, strong) NSMutableDictionary *sendMessageHandlers;
 @property (nonatomic, readwrite, strong) NSMutableDictionary *channelExtensions;
+@property (nonatomic, readwrite, strong) NSMutableDictionary *outgoingExtensions;
 
 @property (nonatomic, readwrite, strong) NSString *clientId;
 
@@ -149,6 +150,7 @@ NSInteger const MZFayeClientDefaultMaximumAttempts = 5;
 {
     if (self = [super init]) {
         _channelExtensions = [NSMutableDictionary dictionary];
+        _outgoingExtensions = [NSMutableDictionary dictionary];
         _channelSubscribeHandlers = [NSMutableDictionary dictionary];
         _channelUnsubscribeHandlers = [NSMutableDictionary dictionary];
         _channelReceivedMessageHandlers = [NSMutableDictionary dictionary];
@@ -207,12 +209,16 @@ NSInteger const MZFayeClientDefaultMaximumAttempts = 5;
  *  clientId - The client ID returned in the handshake response
  *  connectionType - The connection type used by the client for the purposes of this connection.
  */
-- (void)sendBayeuxConnectMessage
+- (void)sendBayeuxConnectMessage:(MZFayeMessage*)fayeMessage
 {
-    NSDictionary *message = @{MZFayeClientBayeuxMessageChannelKey : MZFayeClientBayeuxChannelConnect,
+    NSMutableDictionary *message = [@{MZFayeClientBayeuxMessageChannelKey : MZFayeClientBayeuxChannelConnect,
                               MZFayeClientBayeuxMessageClientIdKey : self.clientId,
-                              MZFayeClientBayeuxMessageConnectionTypeKey : MZFayeClientBayeuxConnectionTypeWebSocket
-                              };
+                              MZFayeClientBayeuxMessageConnectionTypeKey : MZFayeClientBayeuxConnectionTypeWebSocket,
+                                      } mutableCopy];
+    
+    if([self.channelExtensions objectForKey:MZFayeClientBayeuxChannelConnect] != nil) {
+        [message setObject:(NSDictionary*)[self.channelExtensions objectForKey:MZFayeClientBayeuxChannelConnect] forKey:@"ext"];
+    }
     
     message = [self appendExtensionToMessage:message channel:MZFayeClientBayeuxChannelConnect];
     
@@ -377,6 +383,8 @@ NSInteger const MZFayeClientDefaultMaximumAttempts = 5;
 {
     [self.channelExtensions removeObjectForKey:channel];
 }
+
+//method to follow javascript methods on doc
 
 - (void)sendMessage:(NSDictionary *)message toChannel:(NSString *)channel
 {
@@ -605,8 +613,10 @@ NSInteger const MZFayeClientDefaultMaximumAttempts = 5;
 
 #pragma mark - Message handling
 
+//incoming
 - (void)handleFayeMessages:(NSArray *)messages
 {
+    
     for (NSDictionary *message in messages) {
         
         if (![message isKindOfClass:[NSDictionary class]]) {
@@ -618,6 +628,12 @@ NSInteger const MZFayeClientDefaultMaximumAttempts = 5;
         }
         
         MZFayeMessage *fayeMessage = [MZFayeMessage messageFromDictionary:message];
+        
+        
+        //subscribe to meta messages for extension
+        if ([self.delegate respondsToSelector:@selector(fayeClient:didReceiveIncoming:)]) {
+            [self.delegate fayeClient:self didReceiveIncoming:message];
+        }
         
         if ([fayeMessage.channel isEqualToString:MZFayeClientBayeuxChannelHandshake]) {
             
@@ -667,7 +683,7 @@ NSInteger const MZFayeClientDefaultMaximumAttempts = 5;
         if ([self.delegate respondsToSelector:@selector(fayeClient:didConnectToURL:extension:)]) {
             [self.delegate fayeClient:self didConnectToURL:self.url extension:fayeMessage.ext];
         }
-        [self sendBayeuxConnectMessage];
+        [self sendBayeuxConnectMessage:fayeMessage];
         [self subscribePendingSubscriptions];
         
         MZFayeClientSuccessHandler successHandler = self.connectHandlers[@YES];
@@ -689,7 +705,7 @@ NSInteger const MZFayeClientDefaultMaximumAttempts = 5;
 {
     if ([fayeMessage.successful boolValue]) {
         self.connected = YES;
-        [self sendBayeuxConnectMessage];
+        [self sendBayeuxConnectMessage:fayeMessage];
         
         // Note: success handler block is not called yet; we wait for handshake
     } else {

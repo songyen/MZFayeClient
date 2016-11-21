@@ -67,6 +67,7 @@ typedef void (^MZFayeClientFailureHandler)(NSError *error);
 - (void)fayeClient:(MZFayeClient *)client didFailDeserializeMessage:(NSDictionary *)message
          withError:(NSError *)error;
 - (void)fayeClient:(MZFayeClient *)client didReceiveMessage:(NSDictionary *)messageData fromChannel:(NSString *)channel extension:(NSDictionary *)extension;
+- (void)fayeClient:(MZFayeClient *)client didReceiveIncoming:(NSDictionary *)payload;
 
 @end
 
